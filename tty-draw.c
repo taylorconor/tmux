@@ -53,7 +53,7 @@ tty_draw_line_clear(struct tty *tty, u_int px, u_int py, u_int nx,
 		return;
 
 	/* If genuine BCE is available, can try escape sequences. */
-	if (!wrapped && nx >= 10 && !tty_fake_bce(tty, defaults, bg)) {
+	if (tty->client->overlay_check == NULL && !wrapped && nx >= 10 && !tty_fake_bce(tty, defaults, bg)) {
 		/* Off the end of the line, use EL if available. */
 		if (px + nx >= tty->sx && tty_term_has(tty->term, TTYC_EL)) {
 			tty_cursor(tty, px, py);
@@ -77,14 +77,24 @@ tty_draw_line_clear(struct tty *tty, u_int px, u_int py, u_int nx,
 	}
 
         /* Couldn't use an escape sequence, use spaces. */
-	if (px != 0 || !wrapped)
-		tty_cursor(tty, px, py);
-	if (nx == 1)
-		tty_putc(tty, ' ');
-	else if (nx == 2)
-		tty_putn(tty, "  ", 2, 2);
-	else
-		tty_repeat_space(tty, nx);
+	struct visible_ranges	*r;
+	struct visible_range	*rr;
+	u_int			 i;
+
+	r = tty_check_overlay_range(tty, px, py, nx);
+	for (i = 0; i < r->used; i++) {
+		rr = &r->ranges[i];
+		if (rr->nx != 0) {
+			if (rr->px != 0 || !wrapped)
+				tty_cursor(tty, rr->px, py);
+			if (rr->nx == 1)
+				tty_putc(tty, ' ');
+			else if (rr->nx == 2)
+				tty_putn(tty, "  ", 2, 2);
+			else
+				tty_repeat_space(tty, rr->nx);
+		}
+	}
 }
 
 /* Is this cell empty? */
